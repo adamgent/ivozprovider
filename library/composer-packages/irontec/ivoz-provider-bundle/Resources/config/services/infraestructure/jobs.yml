@@ -17,7 +17,7 @@ services:
   # Cgrates reload
   Ivoz\Cgr\Infrastructure\Gearman\Jobs\Cgrates:
     arguments:
-      $settings: '%gearmand%'
+      $redisDb: '%redis_jobs_db%'
 
   Ivoz\Cgr\Domain\Job\RaterReloadInterface:
     alias: Ivoz\Cgr\Infrastructure\Gearman\Jobs\Cgrates

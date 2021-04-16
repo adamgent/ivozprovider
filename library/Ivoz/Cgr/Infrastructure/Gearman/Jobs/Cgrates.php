@@ -3,40 +3,28 @@
 namespace Ivoz\Cgr\Infrastructure\Gearman\Jobs;
 
 use Ivoz\Cgr\Domain\Job\RaterReloadInterface;
-use Ivoz\Core\Infrastructure\Domain\Service\Gearman\Jobs\AbstractJob;
+use Ivoz\Core\Infrastructure\Persistence\Redis\RedisMasterFactory;
+use Psr\Log\LoggerInterface;
 
-class Cgrates extends AbstractJob implements RaterReloadInterface
+class Cgrates implements RaterReloadInterface
 {
-    private static $alreadySent = false;
+    private $redisMasterFactory;
+    private $redisDb;
+    private $logger;
 
-    /**
-     * @var string
-     */
-    protected $tpid;
+    private $tpid;
+    private $notifyThresholdForAccount;
+    private $disableDestinations = false;
 
-    /**
-     * @var string | null
-     */
-    protected $notifyThresholdForAccount;
-
-    /**
-     * @var bool
-     */
-    protected $disableDestinations = false;
-
-    /**
-     * @var string
-     */
-    protected $method = "WorkerCgrates~reload";
-
-    /**
-     * @var array
-     */
-    protected $mainVariables = [
-        'tpid',
-        'notifyThresholdForAccount',
-        'disableDestinations',
-    ];
+    public function __construct(
+        RedisMasterFactory $redisMasterFactory,
+        int $redisDb,
+        LoggerInterface $logger
+    ) {
+        $this->redisMasterFactory = $redisMasterFactory;
+        $this->redisDb = $redisDb;
+        $this->logger = $logger;
+    }
 
     public function setTpid($tpid): self
     {
@@ -75,11 +63,29 @@ class Cgrates extends AbstractJob implements RaterReloadInterface
 
     public function send(): void
     {
-        if (self::$alreadySent) {
-            return;
-        }
-        self::$alreadySent = true;
+        try {
+            $redisClient = $this->redisMasterFactory->create(
+                $this->redisDb
+            );
 
-        parent::send();
+            $data = [
+                'tpid' => $this->tpid,
+                'notifyThresholdForAccount' => $this->notifyThresholdForAccount,
+                'disableDestinations' => $this->disableDestinations,
+            ];
+
+            $redisClient->rPush(
+                self::CHANNEL,
+                \json_encode($data)
+            );
+
+            $redisClient->close();
+        } catch (\Exception $e) {
+            $this
+                ->logger
+                ->error(
+                    $e->getMessage()
+                );
+        }
     }
 }

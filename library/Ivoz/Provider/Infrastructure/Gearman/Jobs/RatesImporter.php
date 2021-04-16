@@ -2,43 +2,58 @@
 
 namespace Ivoz\Provider\Infrastructure\Gearman\Jobs;
 
-use Ivoz\Core\Infrastructure\Domain\Service\Gearman\Jobs\AbstractJob;
+use Ivoz\Core\Infrastructure\Persistence\Redis\RedisMasterFactory;
 use Ivoz\Provider\Domain\Job\RatesImporterJobInterface;
+use Psr\Log\LoggerInterface;
 
-class RatesImporter extends AbstractJob implements RatesImporterJobInterface
+class RatesImporter implements RatesImporterJobInterface
 {
-    /**
-     * @var array
-     */
-    protected $params = [];
+    private $redisMasterFactory;
+    private $redisDb;
+    private $logger;
 
-    /**
-     * @var string
-     */
-    protected $method = "WorkerRates~import";
+    private $params = [];
 
-    /**
-     * @var array
-     */
-    protected $mainVariables = array(
-        'params',
-    );
+    public function __construct(
+        RedisMasterFactory $redisMasterFactory,
+        int $redisDb,
+        LoggerInterface $logger
+    ) {
+        $this->redisMasterFactory = $redisMasterFactory;
+        $this->redisDb = $redisDb;
+        $this->logger = $logger;
+    }
 
-    /**
-     * @param array $params
-     * @return $this
-     */
-    public function setParams(array $params)
+    public function setParams(array $params): self
     {
         $this->params = $params;
         return $this;
     }
 
-    /**
-     * @return array
-     */
     public function getParams(): array
     {
         return $this->params;
+    }
+
+    public function send(): void
+    {
+        try {
+            $redisClient = $this->redisMasterFactory->create(
+                $this->redisDb
+            );
+
+            $redisClient->rPush(
+                self::CHANNEL,
+                \json_encode($this->params)
+            );
+
+            $redisClient->close();
+        } catch (\Exception $e) {
+            $this
+                ->logger
+                ->error(
+                    $e->getMessage()
+                );
+        }
     }
 }

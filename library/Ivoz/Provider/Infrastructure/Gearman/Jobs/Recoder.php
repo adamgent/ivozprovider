@@ -2,33 +2,28 @@
 
 namespace Ivoz\Provider\Infrastructure\Gearman\Jobs;
 
-use Ivoz\Core\Infrastructure\Domain\Service\Gearman\Jobs\AbstractJob;
+use Ivoz\Core\Infrastructure\Persistence\Redis\RedisMasterFactory;
 use Ivoz\Provider\Domain\Job\RecoderJobInterface;
+use Psr\Log\LoggerInterface;
 
-class Recoder extends AbstractJob implements RecoderJobInterface
+class Recoder implements RecoderJobInterface
 {
-    /**
-     * @var integer
-     */
-    protected $id;
+    private $redisMasterFactory;
+    private $redisDb;
+    private $logger;
 
-    /**
-     * @var string
-     */
-    protected $entityName;
+    private $id;
+    private $entityName;
 
-    /**
-     * @var string
-     */
-    protected $method = "WorkerMultimedia~encode";
-
-    /**
-     * @var array
-     */
-    protected $mainVariables = array(
-        'id',
-        'entityName'
-    );
+    public function __construct(
+        RedisMasterFactory $redisMasterFactory,
+        int $redisDb,
+        LoggerInterface $logger
+    ) {
+        $this->redisMasterFactory = $redisMasterFactory;
+        $this->redisDb = $redisDb;
+        $this->logger = $logger;
+    }
 
     public function setId($id): self
     {
@@ -50,5 +45,32 @@ class Recoder extends AbstractJob implements RecoderJobInterface
     public function getEntityName(): string
     {
         return $this->entityName;
+    }
+
+    public function send(): void
+    {
+        try {
+            $redisClient = $this->redisMasterFactory->create(
+                $this->redisDb
+            );
+
+            $data = [
+                'id' => $this->id,
+                'entityName' => $this->entityName
+            ];
+
+            $redisClient->rPush(
+                self::CHANNEL,
+                \json_encode($data)
+            );
+
+            $redisClient->close();
+        } catch (\Exception $e) {
+            $this
+                ->logger
+                ->error(
+                    $e->getMessage()
+                );
+        }
     }
 }

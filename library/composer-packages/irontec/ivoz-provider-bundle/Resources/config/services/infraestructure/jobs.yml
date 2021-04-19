@@ -33,8 +33,7 @@ services:
   # Audio Recoder
   Ivoz\Provider\Infrastructure\Gearman\Jobs\Recoder:
     arguments:
-      $manager: '@Ivoz\Core\Infrastructure\Domain\Service\Gearman\Manager'
-      $settings: '%gearmand%'
+      $redisDb: '%redis_jobs_db%'
 
   Ivoz\Provider\Domain\Job\RecoderJobInterface:
     alias: Ivoz\Provider\Infrastructure\Gearman\Jobs\Recoder
